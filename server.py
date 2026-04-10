@@ -1,6 +1,4 @@
-import socket
-import threading
-import time
+import asyncio
 
 from core.commands import CommandHandler
 from core.resp import RESPParser
@@ -10,92 +8,78 @@ class RedisServer:
     def __init__(self, host='127.0.0.1', port=6380):
         self.host = host
         self.port = port
-        self.running = False
-        self.thread = None
         self.server = None
         self.parser = RESPParser()
         self.handler = CommandHandler()
 
-
-    def start(self):
-        if self.running:
+    async def start(self):
+        if self.server is not None:
             return
 
-        self.running = True
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind((self.host, self.port))
-        self.server.listen(5)
+        self.server = await asyncio.start_server(
+            self.handle_client,
+            self.host,
+            self.port
+        )
 
-        print(f"Redis server ready on {self.host}:{self.port}")
+        addr = ", ".join(str(sock.getsockname()) for sock in self.server.sockets or [])
+        print(f"Redis server ready on {addr}")
 
-        self.thread = threading.Thread(target=self.accept_connections, daemon=True)
-        self.thread.start()
+        async with self.server:
+            await self.server.serve_forever()
 
+    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        addr = writer.get_extra_info('peername')
+        print(f"Connected by {addr}")
 
-    def accept_connections(self):
-        while self.running:
-            try:
-                conn, addr = self.server.accept()
-                print(f"Connected by {addr}")
-                client_thread = threading.Thread(
-                    target=self.handle_client,
-                    args=(conn, addr),
-                    daemon=True
-                )
-                client_thread.start()
-
-            except OSError:
-                break
-
-    def handle_client(self, conn, addr):
-        print("Conn: ", conn)
         parser = RESPParser()
         try:
             while True:
-                data = conn.recv(1024)
+                data = await reader.read(1024)
+                # print("Data: ", data)
                 if not data:
                     break
 
                 parser.feed(data)
                 commands = parser.parse_all()
-
-                # print("commands: ", commands)
+                # print("Commands: ", commands)
 
                 for parts in commands:
                     if not parts:
                         continue
 
                     response = self.handler.handle(parts)
-                    conn.sendall(response)
+                    writer.write(response)
+                    await writer.drain()
 
                     if parts[0].upper() == "QUIT":
+                        writer.close()
+                        await writer.wait_closed()
                         return
+
+        except Exception as e:
+            print(f"Error with {addr}: {e}")
+
         finally:
-            conn.close()
+            writer.close()
+            await writer.wait_closed()
+
+    async def stop(self):
+        if self.server is not None:
+            self.server.close()
+            await self.server.wait_closed()
+            self.server = None
+            print("Server stopped")
 
 
-    def stop(self):
-        self.running = False
-
-        if self.server:
-            try:
-                self.server.close()
-            except OSError:
-                pass
-
-        if self.thread:
-            self.thread.join(timeout=1)
-
-        print("Server stopped")
+async def main():
+    server = RedisServer()
+    try:
+        await server.start()
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        print("\nShutting down Redis server...")
+        await server.stop()
 
 
 if __name__ == "__main__":
-    server = RedisServer()
-    server.start()
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        server.stop()
+    asyncio.run(main())

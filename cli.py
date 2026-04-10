@@ -26,12 +26,10 @@ class RedisCLI:
             return None
 
         # print("args: ", args)
-
         cmd = f"*{len(args)}\r\n"
         for arg in args:
             arg_bytes = str(arg).encode("utf-8")
             cmd += f"${len(arg_bytes)}\r\n{arg}\r\n"
-
         # print("after parse: ", cmd)
 
         try:
@@ -41,8 +39,12 @@ class RedisCLI:
             return response.decode("utf-8", errors="replace").strip()
             # response = self._receive_response()
             # print(response)
-        except Exception as e:
-            print(f"Error sending command: {e}")
+        except (BrokenPipeError, ConnectionResetError):
+            print("Connection lost. Reconnecting...")
+            if self.connect():
+                self.sock.sendall(cmd.encode('utf-8'))
+                response = self.sock.recv(1024)
+                return response.decode("utf-8", errors="replace").strip()
             return None
 
     def run(self):
@@ -78,9 +80,6 @@ class RedisCLI:
 
                 print(response)
 
-
-                # else:
-                #     self.send_command(command)
             except KeyboardInterrupt:
                 print("\nUse 'quit' to exit")
             except EOFError:
