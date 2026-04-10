@@ -21,6 +21,30 @@ class RedisCLI:
             print("Make sure the server is running: python server.py")
             return False
 
+    def send_command(self, *args):
+        if not args:
+            return None
+
+        # print("args: ", args)
+
+        cmd = f"*{len(args)}\r\n"
+        for arg in args:
+            arg_bytes = str(arg).encode("utf-8")
+            cmd += f"${len(arg_bytes)}\r\n{arg}\r\n"
+
+        # print("after parse: ", cmd)
+
+        try:
+            # print("sending command: ", cmd.encode('utf-8'))
+            self.sock.sendall(cmd.encode('utf-8'))
+            response = self.sock.recv(1024)
+            return response.decode("utf-8", errors="replace").strip()
+            # response = self._receive_response()
+            # print(response)
+        except Exception as e:
+            print(f"Error sending command: {e}")
+            return None
+
     def run(self):
         if not self.connect():
             return
@@ -33,6 +57,8 @@ class RedisCLI:
                 prompt = f"{self.host}:{self.port} > "
                 command = input(prompt).strip()
 
+                if not command:
+                    continue
                 if command.lower() in ('quit', 'exit'):
                     print("Goodbye!")
                     break
@@ -41,22 +67,28 @@ class RedisCLI:
                     continue
                 elif command.lower() == "help":
                     self.print_help()
-                else:
-                    self.send_command(command)
+                    continue
+
+                parts = self._parse_command(command)
+                print(parts)
+                if not parts:
+                    continue
+
+                response = self.send_command(*parts)
+
+                print(response)
+
+
+                # else:
+                #     self.send_command(command)
             except KeyboardInterrupt:
                 print("\nUse 'quit' to exit")
             except EOFError:
                 print("\nGoodbye!")
                 break
 
-    def send_command(self, command):
-        try:
-            self.sock.sendall((command + '\r\n').encode())
-            response = self.sock.recv(1024).decode().strip()
-            print(response)
-
-        except Exception as e:
-            print(f"Error sending command: {e}")
+    def _parse_command(self, command):
+        return command.split()
 
     def print_help(self):
         print("""
