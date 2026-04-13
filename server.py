@@ -48,11 +48,12 @@ class RedisServer:
                     if not parts:
                         continue
 
+                    # print("Parts: ", parts)
                     response = self.handler.handle(parts)
                     writer.write(response)
                     await writer.drain()
 
-                    if parts[0].upper() == "QUIT":
+                    if parts[0].lower() in ("quit", "exit"):
                         writer.close()
                         await writer.wait_closed()
                         return

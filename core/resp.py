@@ -67,6 +67,72 @@ class RESPParser:
 
         return commands
 
+class RESPError(Exception):
+    pass
+
+class RESPEncoder:
+    # Encode a command (list of strings) into RESP format
+
+    @staticmethod
+    def encode(value: list) -> bytes:
+        if value is None:
+            return b"$-1\r\n"
+
+        elif isinstance(value, str):
+            return RESPEncoder.encode_bulk_string(value)
+
+        elif isinstance(value, int):
+            return RESPEncoder.encode_error(str(value))
+
+        elif isinstance(value, list):
+            return RESPEncoder.encode_array(value)
+
+        elif isinstance(value, RESPError):
+            return RESPEncoder.encode_error(str(value))
+
+
+        elif isinstance(value, SimpleString):
+            return RESPEncoder.encode_simple_string(str(value))
+
+        else:
+            return RESPEncoder.encode_bulk_string(str(value))
+
+
+    @staticmethod
+    def encode_bulk_string(value: str) -> bytes:
+        encoded = value.encode("utf-8")
+        return f'${len(encoded)}\r\n'.encode() + encoded + b'\r\n'
+
+    @staticmethod
+    def encode_integer(value: int) -> bytes:
+        return f":{value}\r\n".encode()
+
+    @staticmethod
+    def encode_array(value: list) -> bytes:
+        encoded = f"*{len(value)}\r\n".encode()
+        for item in value:
+            encoded += RESPEncoder.encode(item)
+        return encoded
+
+    # Encode an error message
+    @staticmethod
+    def encode_error(value: str) -> bytes:
+        return f"-{value}\r\n".encode()
+
+    @staticmethod
+    def encode_simple_string(value: str) -> bytes:
+        return f"+{value}\r\n".encode()
+
+    @staticmethod
+    def ok() -> bytes:
+        return b'+OK\r\n'
+
+
+class SimpleString:
+    def __init__(self, value: str):
+        self.value = value
+
+
 
 # obj = RESPParser()
 # obj.feed(b'*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$5\r\nKhetu\r\n')
