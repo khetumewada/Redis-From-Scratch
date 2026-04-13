@@ -60,7 +60,8 @@ class RedisCLI:
                 break
         return self._parse_full(data)
 
-    def _try_parse(self, data):
+    @staticmethod
+    def _try_parse(data):
         """Try to parse, return (result, remaining) or (None, data)"""
         if not data:
             return None, data
@@ -81,7 +82,8 @@ class RedisCLI:
             return True, b''
         return None, data
 
-    def _parse_full(self, data):
+    @staticmethod
+    def _parse_full(data):
         """Parse the full response"""
         if not data:
             return None
@@ -100,7 +102,8 @@ class RedisCLI:
             return 'bulk', data[idx + 2:idx + 2 + length].decode('utf-8', errors='replace')
         return "Unknown", data.decode('utf-8', errors='replace')
 
-    def format_response(self, response, indent=0):
+    @staticmethod
+    def _format_response(response, indent=0):
         """Format a response for display"""
         prefix = '  ' * indent
         if response is None:
@@ -174,7 +177,7 @@ class RedisCLI:
                     continue
 
                 response = self.send_command(*parts)
-                print(self.format_response(response))
+                print(self._format_response(response))
 
                 if parts[0].lower() in ("quit", "exit"):
                     print("Goodbye!")
@@ -186,8 +189,8 @@ class RedisCLI:
                 print("\nGoodbye!")
                 break
 
-
-    def _parse_line(self, line):
+    @staticmethod
+    def _parse_line(line):
         """Parse a command line, respecting quoted strings"""
         parts = []
         current = []

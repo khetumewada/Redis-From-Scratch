@@ -62,18 +62,20 @@ class CommandHandler:
         except Exception as e:
             return RESPEncoder.encode_error(str(e))
 
-
-    def _ping(self, args) -> bytes:
+    @staticmethod
+    def _ping(args) -> bytes:
         if len(args) > 1:
             return RESPEncoder.encode_error("ERR wrong number of arguments for 'ping' command")
         if args:
             return RESPEncoder.encode_bulk_string(args[0])
         return b"+PONG\r\n"
 
-    def _echo(self, args):
+    @staticmethod
+    def _echo(args):
         if not args or len(args) > 1:
             return RESPEncoder.encode_error("ERR wrong number of arguments for 'echo' command")
         return RESPEncoder.encode_bulk_string(args[0])
 
-    def _quit(self, args):
+    @staticmethod
+    def _quit(args):
         return RESPEncoder.ok()

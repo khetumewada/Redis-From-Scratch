@@ -6,7 +6,7 @@ class RESPParser:
         self.buffer += data
 
     def parse_all(self):
-        "Parse all available RESP commands from the buffer. Returns a list of command parts (list of strings)."
+        """Parse all available RESP commands from the buffer. Returns a list of command parts (list of strings)."""
         commands = []
 
         while True:
@@ -82,7 +82,7 @@ class RESPEncoder:
             return RESPEncoder.encode_bulk_string(value)
 
         elif isinstance(value, int):
-            return RESPEncoder.encode_error(str(value))
+            return RESPEncoder.encode_integer(value)
 
         elif isinstance(value, list):
             return RESPEncoder.encode_array(value)
