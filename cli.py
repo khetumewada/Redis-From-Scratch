@@ -1,6 +1,9 @@
 import socket
 import os
+from core.logger import setup_logger
+from logging import DEBUG
 
+logger = setup_logger(name="cli", level=DEBUG, console=False, log_file="cli.log")
 
 class RedisCLI:
 
@@ -25,15 +28,15 @@ class RedisCLI:
         if not args:
             return None
 
-        # print("args: ", args)
+        logger.debug(f"Sending command: {args}")
         cmd = f"*{len(args)}\r\n"
         for arg in args:
             arg_bytes = str(arg).encode("utf-8")
             cmd += f"${len(arg_bytes)}\r\n{arg}\r\n"
-        # print("after parse: ", cmd)
+        logger.debug(f"Parsed command: {cmd}")
 
         try:
-            # print("sending command: ", cmd.encode('utf-8'))
+            logger.debug(f"Sending command to Redis {cmd.encode('utf-8')}")
             self.sock.sendall(cmd.encode('utf-8'))
             return self._read_response()
 
@@ -50,9 +53,11 @@ class RedisCLI:
         while True:
             try:
                 chunk = self.sock.recv(4096)
+                logger.debug(f"Received chunk of data: {chunk}")
                 if not chunk:
                     break
                 data += chunk
+                logger.debug(f"Current data: {data}")
                 parsed, _ = self._try_parse(data)
                 if parsed is not None:
                     break
@@ -171,12 +176,12 @@ class RedisCLI:
                     continue
 
                 parts = self._parse_line(command)
-                # print("Parsed line: ", parts)
 
                 if not parts:
                     continue
 
                 response = self.send_command(*parts)
+                logger.debug(f"Response: {response}")
                 print(self._format_response(response))
 
                 if parts[0].lower() in ("quit", "exit"):
