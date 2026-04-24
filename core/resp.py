@@ -87,6 +87,9 @@ class RESPEncoder:
         elif isinstance(value, list):
             return RESPEncoder.encode_array(value)
 
+        elif isinstance(value, bytes):
+            return RESPEncoder.encode_bulk_bytes(value)
+
         elif isinstance(value, RESPError):
             return RESPEncoder.encode_error(str(value))
 
@@ -108,11 +111,15 @@ class RESPEncoder:
         return f":{value}\r\n".encode()
 
     @staticmethod
+    def encode_bulk_bytes(value: bytes) -> bytes:
+        return f"${len(value)}\r\n".encode() + value + b"\r\n"
+
+    @staticmethod
     def encode_array(value: list) -> bytes:
-        encoded = f"*{len(value)}\r\n".encode()
+        result = f"*{len(value)}\r\n".encode()
         for item in value:
-            encoded += RESPEncoder.encode(item)
-        return encoded
+            result += RESPEncoder.encode(item)
+        return result
 
     # Encode an error message
     @staticmethod
@@ -126,6 +133,10 @@ class RESPEncoder:
     @staticmethod
     def ok() -> bytes:
         return b'+OK\r\n'
+
+    @staticmethod
+    def null() -> bytes:
+        return b'$-1\r\n'
 
 
 class SimpleString:

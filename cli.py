@@ -1,5 +1,7 @@
 import socket
 import os
+from unicodedata import lookup
+
 from core.logger import setup_logger
 from logging import DEBUG
 
@@ -10,6 +12,7 @@ class RedisCLI:
     def __init__(self, host='127.0.0.1', port=6380):
         self.host = host
         self.port = port
+        self.db = 0
         self.sock = None
 
     def connect(self):
@@ -38,6 +41,7 @@ class RedisCLI:
         try:
             logger.debug(f"Sending command to Redis {cmd.encode('utf-8')}")
             self.sock.sendall(cmd.encode('utf-8'))
+            logger.debug("Command sent")
             return self._read_response()
 
         except (BrokenPipeError, ConnectionResetError):
@@ -59,6 +63,7 @@ class RedisCLI:
                 data += chunk
                 logger.debug(f"Current data: {data}")
                 parsed, _ = self._try_parse(data)
+                logger.debug(f"Try Parsed: {parsed}")
                 if parsed is not None:
                     break
             except socket.timeout:
@@ -92,25 +97,81 @@ class RedisCLI:
         """Parse the full response"""
         if not data:
             return None
+
+        def parse_value(chunk):
+            if not chunk:
+                return None, chunk
+
+            prefix = chr(chunk[0])
+            line_end = chunk.find(b'\r\n')
+            if line_end == -1:
+                return None, chunk
+
+            if prefix == '+':
+                return chunk[1:line_end].decode(), chunk[line_end + 2:]
+
+            if prefix == '-':
+                return chunk[1:line_end].decode(), chunk[line_end + 2:]
+
+            if prefix == ':':
+                return int(chunk[1:line_end]), chunk[line_end + 2:]
+
+            if prefix == '$':
+                length = int(chunk[1:line_end])
+                if length == -1:
+                    return None, chunk[line_end + 2:]
+
+                start = line_end + 2
+                end = start + length
+                if len(chunk) < end + 2:
+                    return None, chunk
+
+                value = chunk[start:end].decode('utf-8', errors='replace')
+                return value, chunk[end + 2:]
+
+            if prefix == '*':
+                count = int(chunk[1:line_end])
+                if count == -1:
+                    return None, chunk[line_end + 2:]
+
+                items = []
+                remaining = chunk[line_end + 2:]
+
+                for _ in range(count):
+                    item, remaining = parse_value(remaining)
+                    if remaining is None:
+                        return None, chunk
+                    items.append(item)
+
+                return items, remaining
+
+            return chunk.decode('utf-8', errors='replace'), b''
+
+        value, _ = parse_value(data)
         prefix = chr(data[0])
+
         if prefix == '+':
-            return 'simple', data[1:data.find(b'\r\n')].decode()
+            return 'simple', value
         elif prefix == '-':
-            return 'error', data[1:data.find(b'\r\n')].decode()
+            return 'error', value
         elif prefix == ':':
-            return 'integer', int(data[1:data.find(b'\r\n')])
+            return 'integer', value
         elif prefix == '$':
-            idx = data.find(b'\r\n')
-            length = int(data[1:idx])
-            if length == -1:
+            if value is None:
                 return 'nil', None
-            return 'bulk', data[idx + 2:idx + 2 + length].decode('utf-8', errors='replace')
+            return 'bulk', value
+        elif prefix == '*':
+            if value is None:
+                return 'nil', None
+            return 'array', value
+
         return "Unknown", data.decode('utf-8', errors='replace')
 
+
     @staticmethod
-    def _format_response(response, indent=0):
+    def _format_response(response, indent=1):
         """Format a response for display"""
-        prefix = '  ' * indent
+        prefix = ' ' * indent
         if response is None:
             return f'{prefix}(nil)'
 
@@ -127,9 +188,7 @@ class RedisCLI:
         elif resp_type == 'bulk':
             return f'{prefix}"{value}"'
         elif resp_type == 'array':
-            if value is None:
-                return f'{prefix}(empty array)'
-            if not value:
+            if value is None or not value:
                 return f'{prefix}(empty array)'
             lines = []
             for i, item in enumerate(value, 1):
@@ -161,7 +220,7 @@ class RedisCLI:
 
         while True:
             try:
-                prompt = f"{self.host}:{self.port} > "
+                prompt = f"{self.host}:{self.port}[{self.db}]> "
                 command = input(prompt).strip()
 
                 if not command:
@@ -179,6 +238,13 @@ class RedisCLI:
 
                 if not parts:
                     continue
+
+                if parts[0].lower() == "select":
+                    if len(parts) != 2 or not parts[1].isdigit():
+                        print("Usage: select <db_index>")
+                        continue
+                    self.db = int(parts[1])
+                    print(f"Switched to database {self.db}")
 
                 response = self.send_command(*parts)
                 logger.debug(f"Response: {response}")

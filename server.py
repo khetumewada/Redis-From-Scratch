@@ -36,6 +36,10 @@ class RedisServer:
         logger.info(f"Connected by {addr}")
 
         parser = RESPParser()
+        client_state = {
+            "db": 0,
+            "addr": addr
+        }
         try:
             while True:
                 data = await reader.read(1024)
@@ -51,7 +55,7 @@ class RedisServer:
                     if not parts:
                         continue
 
-                    response = self.handler.handle(parts)
+                    response = self.handler.handle(parts, client_state)
                     writer.write(response)
                     await writer.drain()
 
